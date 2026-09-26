@@ -2,7 +2,8 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = 'kanban-dashboard'
+        DOCKER_IMAGE = 'venkateshgupta04/kanban-dashboard'
+        IMAGE_TAG = "build-${BUILD_NUMBER}"
     }
 
     stages {
@@ -17,30 +18,53 @@ pipeline {
             steps {
                 sh 'git --version'
                 sh 'docker --version'
-                sh 'docker info'
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t ${IMAGE_NAME}:jenkins-${BUILD_NUMBER} .'
+                sh 'docker build -t ${DOCKER_IMAGE}:${IMAGE_TAG} .'
             }
         }
 
         stage('Verify Docker Image') {
             steps {
-                sh 'docker images ${IMAGE_NAME}:jenkins-${BUILD_NUMBER}'
+                sh 'docker images ${DOCKER_IMAGE}:${IMAGE_TAG}'
+            }
+        }
+
+        stage('Docker Hub Login') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKERHUB_USER',
+                        passwordVariable: 'DOCKERHUB_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        echo "$DOCKERHUB_TOKEN" | docker login \
+                            --username "$DOCKERHUB_USER" \
+                            --password-stdin
+                    '''
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                sh 'docker push ${DOCKER_IMAGE}:${IMAGE_TAG}'
             }
         }
     }
 
     post {
         always {
-            sh 'docker image rm ${IMAGE_NAME}:jenkins-${BUILD_NUMBER} || true'
+            sh 'docker image rm ${DOCKER_IMAGE}:${IMAGE_TAG} || true'
         }
 
         success {
-            echo 'CI pipeline completed successfully.'
+            echo 'CI pipeline completed successfully and image was pushed to Docker Hub.'
         }
 
         failure {
